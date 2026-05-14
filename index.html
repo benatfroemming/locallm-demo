@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -193,8 +194,12 @@
   </div>
 
   <p class="note">
-    Bridge loaded from https://benatfroemming.github.io/locallm.html· inference runs on your GPU/CPU
+    Bridge loaded from <code>benatfroemming.github.io/bridge.html</code> · inference running on <span id="device"></span>
   </p>
+
+  <script>
+    document.getElementById("device").textContent = navigator.gpu ? "WebGPU" : "WASM"
+  </script>
 </div>
 
 <script>
