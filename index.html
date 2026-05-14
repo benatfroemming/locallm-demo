@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Demo Site — LocalAI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f9f9f8;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 32px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 500;
+      color: #111;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 28px;
+    }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 20px;
+      padding: 8px 12px;
+      background: #f5f5f4;
+      border-radius: 8px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ddd;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.ready    { background: #16a34a; }
+    .status-dot.loading  { background: #3b82f6; animation: pulse 1s infinite; }
+    .status-dot.error    { background: #dc2626; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* Model selector */
+    .field { margin-bottom: 14px; }
+
+    select, textarea {
+      width: 100%;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #fff;
+      color: #111;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    select:focus, textarea:focus { border-color: #a3a3a3; }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 20px;
+      border-radius: 8px;
+      border: none;
+      background: #111;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s;
+      width: 100%;
+    }
+
+    button:hover:not(:disabled) { background: #333; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* Response */
+    .response-wrap {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .response-wrap.visible { display: block; }
+
+    .response-box {
+      background: #f5f5f4;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: #333;
+      min-height: 60px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .response-box.error { color: #dc2626; background: #fef2f2; border-color: #fca5a5; }
+
+    /* Footer note */
+    .note {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #ccc;
+      text-align: center;
+    }
+
+    .note code {
+      background: #f0f0ef;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <p class="label">LocalAI Demo</p>
+  <h1>Any site. Local inference.</h1>
+  <p class="subtitle">This page has no API key. It uses your browser's cached models via a hidden iframe.</p>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <div class="status-dot" id="dot"></div>
+    <span id="status-text">Connecting to bridge…</span>
+  </div>
+
+  <!-- Model picker -->
+  <div class="field">
+    <p class="label" style="margin-bottom:6px">Model</p>
+    <select id="model-select" disabled>
+      <option value="">Loading available models…</option>
+    </select>
+  </div>
+
+  <!-- Prompt -->
+  <div class="field">
+    <p class="label" style="margin-bottom:6px">Prompt</p>
+    <textarea id="prompt" placeholder="Ask anything…" disabled>Explain what a service worker is in one sentence.</textarea>
+  </div>
+
+  <!-- Run -->
+  <button id="run-btn" disabled>Run</button>
+
+  <!-- Response -->
+  <div class="response-wrap" id="response-wrap">
+    <p class="label" style="margin-bottom:6px;margin-top:0">Response</p>
+    <div class="response-box" id="response-box"></div>
+  </div>
+
+  <p class="note">
+    Bridge loaded from <code>localhost:5173/bridge.html</code> · inference runs on your GPU/CPU
+  </p>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+// Point this at wherever your dashboard (and bridge.html) is served from
+const BRIDGE_ORIGIN = "http://localhost:5173";
+const BRIDGE_URL    = `${BRIDGE_ORIGIN}/bridge.html`;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let bridgeReady = false;
+let iframe       = null;
+let pending      = {}; // id → { resolve, reject, onToken }
+
+// ── UI refs ───────────────────────────────────────────────────────────────────
+const dot         = document.getElementById("dot");
+const statusText  = document.getElementById("status-text");
+const modelSelect = document.getElementById("model-select");
+const promptEl    = document.getElementById("prompt");
+const runBtn      = document.getElementById("run-btn");
+const responseBox = document.getElementById("response-box");
+const responseWrap= document.getElementById("response-wrap");
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  dot.className = "status-dot " + state;
+  statusText.textContent = text;
+}
+
+// ── 1. Inject hidden iframe ───────────────────────────────────────────────────
+iframe = document.createElement("iframe");
+iframe.src = BRIDGE_URL;
+iframe.style.cssText = "display:none;position:absolute";
+iframe.sandbox = "allow-scripts allow-same-origin";
+document.body.appendChild(iframe);
+
+// ── 2. Listen for messages from the bridge ────────────────────────────────────
+window.addEventListener("message", (e) => {
+  if (e.origin !== BRIDGE_ORIGIN) return;
+  const msg = e.data;
+  if (!msg?.type) return;
+
+  // Bridge is alive
+  if (msg.type === "LOCALAI_READY") {
+    bridgeReady = true;
+    setStatus("loading", "Detecting cached models…");
+    iframe.contentWindow.postMessage({ type: "LOCALAI_LIST" }, BRIDGE_ORIGIN);
+    return;
+  }
+
+  // Model list received
+  if (msg.type === "LOCALAI_MODELS") {
+    modelSelect.innerHTML = "";
+
+    if (msg.models.length === 0) {
+      modelSelect.innerHTML = '<option value="">No models downloaded — visit dashboard first</option>';
+      setStatus("error", "No models found. Download one at localhost:5173");
+      return;
+    }
+
+    msg.models.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.name;
+      modelSelect.appendChild(opt);
+    });
+
+    modelSelect.disabled = false;
+    promptEl.disabled    = false;
+    runBtn.disabled      = false;
+    setStatus("ready", `${msg.models.length} model${msg.models.length > 1 ? "s" : ""} available`);
+    return;
+  }
+
+  // Model loading status
+  if (msg.type === "LOCALAI_STATUS") {
+    setStatus("loading", msg.message); // ← just use msg.message directly
+    return;
+  }
+
+  // Streaming token
+  if (msg.type === "LOCALAI_TOKEN") {
+    const req = pending[msg.id];
+    if (req) req.onToken(msg.token);
+    return;
+  }
+
+  // Inference done
+  if (msg.type === "LOCALAI_DONE") {
+    const req = pending[msg.id];
+    if (req) { req.resolve(); delete pending[msg.id]; }
+    return;
+  }
+
+  // Error
+  if (msg.type === "LOCALAI_ERROR") {
+    const req = pending[msg.id];
+    if (req) { req.reject(new Error(msg.message)); delete pending[msg.id]; }
+    return;
+  }
+});
+
+// ── 3. localai.prompt() — the function any site would call ───────────────────
+function prompt(text, modelId, onToken) {
+  return new Promise((resolve, reject) => {
+    if (!bridgeReady) return reject(new Error("Bridge not ready"));
+
+    const id = crypto.randomUUID();
+    pending[id] = { resolve, reject, onToken };
+
+    iframe.contentWindow.postMessage({
+      type: "LOCALAI_RUN",
+      id,
+      prompt: text,
+      modelId,
+    }, BRIDGE_ORIGIN);
+  });
+}
+
+// ── 4. Run button ─────────────────────────────────────────────────────────────
+runBtn.addEventListener("click", async () => {
+  const modelId    = modelSelect.value;
+  const promptText = promptEl.value.trim();
+  if (!modelId || !promptText) return;
+
+  runBtn.disabled      = true;
+  responseBox.className = "response-box";
+  responseBox.textContent = "";
+  responseWrap.className  = "response-wrap visible";
+  setStatus("loading", "Running inference…");
+
+  try {
+    await prompt(promptText, modelId, (token) => {
+      responseBox.textContent += token;
+    });
+    setStatus("ready", "Done");
+  } catch (err) {
+    responseBox.className   = "response-box error";
+    responseBox.textContent = err.message;
+    setStatus("error", "Inference failed");
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+</script>
+
+</body>
+</html>
