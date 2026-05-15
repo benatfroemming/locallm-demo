@@ -100,6 +100,9 @@ function _injectBridge() {
   _iframe.src = BRIDGE_URL;
   _iframe.style.cssText = "display:none;position:absolute;width:0;height:0;border:0";
   _iframe.sandbox = "allow-scripts allow-same-origin";
+  _iframe.addEventListener("load", () => {
+    _iframe.contentWindow.postMessage({ type: "LOCALAI_HELLO" }, BRIDGE_ORIGIN);
+  });
   document.body.appendChild(_iframe);
 }
 
@@ -281,7 +284,7 @@ const localai = {
    * @param {object} options  Same as prompt()
    * @returns {{ promise: Promise<string>, abort: () => void }}
    */
-  promptAbortable({ model, messages, onToken } = {}) {
+  promptAbortable({ model, messages, onToken, maxTokens = 256 } = {}) {
     _assertInit();
 
     if (!messages?.length) {
@@ -312,6 +315,7 @@ const localai = {
           id,
           modelId: targetModel.id,
           messages,
+          maxTokens,
         });
 
         setTimeout(() => {
