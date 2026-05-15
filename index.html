@@ -1,349 +1,745 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Demo Site — LocalAI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LocalAI Testbench</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg:        #0d0d0d;
+      --surface:   #161616;
+      --border:    #2a2a2a;
+      --border2:   #333;
+      --text:      #e8e8e8;
+      --muted:     #666;
+      --dim:       #444;
+      --green:     #4ade80;
+      --green-dim: #166534;
+      --blue:      #60a5fa;
+      --orange:    #fb923c;
+      --red:       #f87171;
+      --yellow:    #fbbf24;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'IBM Plex Sans', sans-serif;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f9f9f8;
-      color: #1a1a1a;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
       min-height: 100vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      flex-direction: column;
     }
 
-    .card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      padding: 32px;
+    /* ── Layout ── */
+    .shell {
+      max-width: 780px;
       width: 100%;
-      max-width: 560px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+      flex: 1;
     }
 
-    .label {
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #aaa;
-      margin-bottom: 6px;
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 20px;
     }
 
-    h1 {
-      font-size: 18px;
-      font-weight: 500;
-      color: #111;
-      margin-bottom: 4px;
-    }
-
-    .subtitle {
+    .header-logo {
+      font-family: var(--mono);
       font-size: 13px;
-      color: #888;
-      margin-bottom: 28px;
+      color: var(--green);
+      letter-spacing: 0.05em;
     }
 
-    /* Status bar */
-    .status-bar {
+    .header-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .header-version {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    /* ── Section ── */
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .panel-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: #aaa;
-      margin-bottom: 20px;
-      padding: 8px 12px;
-      background: #f5f5f4;
-      border-radius: 8px;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .status-dot {
+    .panel-row:last-child { border-bottom: none; }
+
+    .panel-empty {
+      padding: 16px;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    /* ── Model row ── */
+    .model-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #ddd;
+      background: var(--green);
       flex-shrink: 0;
-      transition: background 0.3s;
-    }
-    .status-dot.ready    { background: #16a34a; }
-    .status-dot.loading  { background: #3b82f6; animation: pulse 1s infinite; }
-    .status-dot.error    { background: #dc2626; }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
     }
 
-    /* Model selector */
-    .field { margin-bottom: 14px; }
-
-    select, textarea {
-      width: 100%;
-      font-family: inherit;
+    .model-name {
+      font-family: var(--mono);
       font-size: 13px;
-      padding: 10px 12px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: #fff;
-      color: #111;
-      outline: none;
-      transition: border-color 0.15s;
+      color: var(--text);
+      flex: 1;
     }
 
-    select:focus, textarea:focus { border-color: #a3a3a3; }
+    .model-id {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+
+    .tag--default {
+      color: var(--green);
+      border-color: var(--green-dim);
+      background: rgba(74,222,128,0.07);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s, color 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: #222; border-color: #555; }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn--green {
+      border-color: var(--green-dim);
+      color: var(--green);
+    }
+    .btn--green:hover { background: rgba(74,222,128,0.08); border-color: var(--green); }
+
+    .btn--blue {
+      border-color: #1e3a5f;
+      color: var(--blue);
+    }
+    .btn--blue:hover { background: rgba(96,165,250,0.08); border-color: var(--blue); }
+
+    .btn--red {
+      border-color: #3f1515;
+      color: var(--red);
+    }
+    .btn--red:hover { background: rgba(248,113,113,0.08); border-color: var(--red); }
+
+    .btn--run {
+      padding: 8px 20px;
+      font-size: 12px;
+    }
+
+    /* ── Prompt area ── */
+    .prompt-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .prompt-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .prompt-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      flex: 1;
+    }
+
+    .model-select {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: #1e1e1e;
+      border: 1px solid var(--border2);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+
+    .model-select:focus { outline: 1px solid var(--blue); }
 
     textarea {
-      resize: vertical;
-      min-height: 80px;
-    }
-
-    button {
-      font-family: inherit;
-      font-size: 13px;
-      padding: 9px 20px;
-      border-radius: 8px;
-      border: none;
-      background: #111;
-      color: #fff;
-      cursor: pointer;
-      transition: background 0.15s;
       width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 14px 16px;
+      resize: vertical;
+      min-height: 90px;
+      outline: none;
     }
 
-    button:hover:not(:disabled) { background: #333; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
+    textarea::placeholder { color: var(--dim); }
 
-    /* Response */
-    .response-wrap {
-      margin-top: 20px;
+    .prompt-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .system-toggle {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.1s;
+    }
+    .system-toggle:hover { color: var(--text); }
+
+    .system-wrap {
+      padding: 0 16px 12px;
       display: none;
     }
+    .system-wrap.open { display: block; }
 
-    .response-wrap.visible { display: block; }
+    .system-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
 
-    .response-box {
-      background: #f5f5f4;
-      border: 1px solid #e5e7eb;
+    textarea.system-ta {
+      min-height: 56px;
+      font-size: 12px;
+      padding: 8px 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      resize: none;
+    }
+
+    /* ── Output ── */
+    .output-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 14px;
+      overflow: hidden;
+    }
+
+    .output-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .output-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      flex: 1;
+    }
+
+    .output-status {
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .status--idle     { color: var(--muted); }
+    .status--running  { color: var(--blue); }
+    .status--done     { color: var(--green); }
+    .status--aborted  { color: var(--orange); }
+    .status--error    { color: var(--red); }
+
+    .output-body {
+      padding: 16px;
+      font-family: var(--mono);
       font-size: 13px;
-      line-height: 1.65;
-      color: #333;
-      min-height: 60px;
+      line-height: 1.7;
+      color: var(--text);
+      min-height: 120px;
       white-space: pre-wrap;
       word-break: break-word;
     }
 
-    .response-box.error { color: #dc2626; background: #fef2f2; border-color: #fca5a5; }
+    .output-empty {
+      color: var(--dim);
+    }
 
-    /* Footer note */
-    .note {
-      margin-top: 24px;
+    .cursor {
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      background: var(--blue);
+      vertical-align: text-bottom;
+      animation: blink 0.9s steps(1) infinite;
+      margin-left: 1px;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* ── Log ── */
+    .log {
+      font-family: var(--mono);
       font-size: 11px;
-      color: #ccc;
-      text-align: center;
+      color: var(--muted);
+      line-height: 1.7;
     }
 
-    .note code {
-      background: #f0f0ef;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-family: monospace;
-      color: #888;
+    .log-line { display: flex; gap: 10px; padding: 1px 0; }
+    .log-time { color: var(--dim); flex-shrink: 0; }
+    .log-msg--ok  { color: var(--green); }
+    .log-msg--err { color: var(--red); }
+    .log-msg--info { color: var(--blue); }
+    .log-msg--warn { color: var(--orange); }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 32px 0;
     }
+
+    /* ── Init bar ── */
+    .init-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .init-status {
+      font-family: var(--mono);
+      font-size: 12px;
+      flex: 1;
+    }
+
+    .init-status.connected { color: var(--green); }
+    .init-status.error     { color: var(--red); }
+    .init-status.pending   { color: var(--muted); }
   </style>
 </head>
 <body>
+<div class="shell">
 
-<div class="card">
-  <p class="label">LocalAI Demo</p>
-  <h1>Any site. Local inference.</h1>
-  <p class="subtitle">This page has no API key. It uses your browser's cached models via a hidden iframe.</p>
-
-  <!-- Status -->
-  <div class="status-bar">
-    <div class="status-dot" id="dot"></div>
-    <span id="status-text">Connecting to bridge…</span>
+  <!-- Header -->
+  <div class="header">
+    <span class="header-logo">◆ LocalAI</span>
+    <span class="header-title">Testbench</span>
+    <span class="header-version">v0.2</span>
   </div>
 
-  <!-- Model picker -->
-  <div class="field">
-    <p class="label" style="margin-bottom:6px">Model</p>
-    <select id="model-select" disabled>
-      <option value="">Loading available models…</option>
-    </select>
+  <!-- Init bar -->
+  <div class="init-bar">
+    <span class="init-status pending" id="initStatus">Not connected — click Init to start</span>
+    <button class="btn btn--green" id="btnInit">Init</button>
+    <button class="btn" id="btnResetPerm" title="Reset stored permission">Reset perm</button>
   </div>
 
-  <!-- Prompt -->
-  <div class="field">
-    <p class="label" style="margin-bottom:6px">Prompt</p>
-    <textarea id="prompt" placeholder="Ask anything…" disabled>Explain what a service worker is in one sentence.</textarea>
+  <!-- Models section -->
+  <div class="section">
+    <div class="section-label">Cached models</div>
+    <div class="panel" id="modelList">
+      <div class="panel-empty">Run Init to detect models.</div>
+    </div>
+    <div style="margin-top:8px; display:flex; gap:8px;">
+      <button class="btn btn--blue" id="btnRefresh" disabled>↻ Refresh list</button>
+    </div>
   </div>
 
-  <!-- Run -->
-  <button id="run-btn" disabled>Run</button>
+  <hr class="divider" />
 
-  <!-- Response -->
-  <div class="response-wrap" id="response-wrap">
-    <p class="label" style="margin-bottom:6px;margin-top:0">Response</p>
-    <div class="response-box" id="response-box"></div>
+  <!-- Prompt section -->
+  <div class="section">
+    <div class="section-label">Inference</div>
+
+    <div class="prompt-wrap">
+      <div class="prompt-toolbar">
+        <span class="prompt-label">system</span>
+        <span class="system-toggle" id="sysToggle">▸ add system prompt</span>
+      </div>
+      <div class="system-wrap" id="sysWrap">
+        <div class="system-label">System</div>
+        <textarea class="system-ta" id="systemInput" placeholder="You are a helpful assistant."></textarea>
+      </div>
+
+      <div class="prompt-toolbar" style="border-top: 1px solid var(--border); margin-top:0;">
+        <span class="prompt-label">model</span>
+        <select class="model-select" id="modelSelect">
+          <option value="">— none cached —</option>
+        </select>
+      </div>
+
+      <textarea id="promptInput" placeholder="Type a message and press Run…" rows="4"></textarea>
+
+      <div class="prompt-footer">
+        <button class="btn btn--green btn--run" id="btnRun" disabled>▶ Run</button>
+        <button class="btn btn--red btn--run" id="btnStop" disabled>■ Stop</button>
+        <button class="btn" id="btnClear" style="margin-left:auto;">Clear</button>
+      </div>
+    </div>
   </div>
 
-  <p class="note">
-    Bridge loaded from <code>benatfroemming.github.io/bridge.html</code> · inference running on <span id="device"></span>
-  </p>
+  <!-- Output section -->
+  <div class="section">
+    <div class="section-label">Output</div>
+    <div class="output-wrap">
+      <div class="output-toolbar">
+        <span class="output-label">response</span>
+        <span class="output-status status--idle" id="outputStatus">idle</span>
+        <button class="btn" id="btnCopyOutput" style="font-size:10px; padding:2px 8px;">copy</button>
+      </div>
+      <div class="output-body" id="outputBody">
+        <span class="output-empty">Output will appear here…</span>
+      </div>
+    </div>
+  </div>
 
-  <script>
-    document.getElementById("device").textContent = navigator.gpu ? "WebGPU" : "WASM"
-  </script>
+  <hr class="divider" />
+
+  <!-- Event log -->
+  <div class="section">
+    <div class="section-label">Event log</div>
+    <div class="panel" style="padding: 12px 16px; max-height: 220px; overflow-y: auto;">
+      <div class="log" id="logEl"></div>
+    </div>
+  </div>
+
 </div>
 
-<script>
-// ── Config ────────────────────────────────────────────────────────────────────
-// Point this at wherever your dashboard (and bridge.html) is served from
-const BRIDGE_ORIGIN = "https://benatfroemming.github.io";
-const BRIDGE_URL    = `${BRIDGE_ORIGIN}/locallm/bridge.html`;
+<script type="module">
+import localai from "./localai.js";
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let bridgeReady = false;
-let iframe       = null;
-let pending      = {}; // id → { resolve, reject, onToken }
+// ── Refs ───────────────────────────────────────────────────────────────────────
+const initStatus   = document.getElementById("initStatus");
+const btnInit      = document.getElementById("btnInit");
+const btnResetPerm = document.getElementById("btnResetPerm");
+const btnRefresh   = document.getElementById("btnRefresh");
+const modelList    = document.getElementById("modelList");
+const modelSelect  = document.getElementById("modelSelect");
+const sysToggle    = document.getElementById("sysToggle");
+const sysWrap      = document.getElementById("sysWrap");
+const systemInput  = document.getElementById("systemInput");
+const promptInput  = document.getElementById("promptInput");
+const btnRun       = document.getElementById("btnRun");
+const btnStop      = document.getElementById("btnStop");
+const btnClear     = document.getElementById("btnClear");
+const outputBody   = document.getElementById("outputBody");
+const outputStatus = document.getElementById("outputStatus");
+const btnCopyOutput= document.getElementById("btnCopyOutput");
+const logEl        = document.getElementById("logEl");
 
-// ── UI refs ───────────────────────────────────────────────────────────────────
-const dot         = document.getElementById("dot");
-const statusText  = document.getElementById("status-text");
-const modelSelect = document.getElementById("model-select");
-const promptEl    = document.getElementById("prompt");
-const runBtn      = document.getElementById("run-btn");
-const responseBox = document.getElementById("response-box");
-const responseWrap= document.getElementById("response-wrap");
+let currentAbort = null; // fn to abort running inference
 
-// ── Status helpers ────────────────────────────────────────────────────────────
-function setStatus(state, text) {
-  dot.className = "status-dot " + state;
-  statusText.textContent = text;
+// ── Logging ────────────────────────────────────────────────────────────────────
+function log(msg, type = "info") {
+  const now = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement("div");
+  line.className = "log-line";
+  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg--${type}">${escHtml(msg)}</span>`;
+  logEl.appendChild(line);
+  logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
 }
 
-// ── 1. Inject hidden iframe ───────────────────────────────────────────────────
-iframe = document.createElement("iframe");
-iframe.src = BRIDGE_URL;
-iframe.style.cssText = "display:none;position:absolute";
-iframe.sandbox = "allow-scripts allow-same-origin";
-document.body.appendChild(iframe);
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
 
-// ── 2. Listen for messages from the bridge ────────────────────────────────────
-window.addEventListener("message", (e) => {
-  if (e.origin !== BRIDGE_ORIGIN) return;
-  const msg = e.data;
-  if (!msg?.type) return;
+// ── Status helpers ─────────────────────────────────────────────────────────────
+function setOutputStatus(state, text) {
+  outputStatus.className = `output-status status--${state}`;
+  outputStatus.textContent = text;
+}
 
-  // Bridge is alive
-  if (msg.type === "LOCALAI_READY") {
-    bridgeReady = true;
-    setStatus("loading", "Detecting cached models…");
-    iframe.contentWindow.postMessage({ type: "LOCALAI_LIST" }, BRIDGE_ORIGIN);
+function setInitConnected(msg) {
+  initStatus.className = "init-status connected";
+  initStatus.textContent = msg;
+}
+
+function setInitError(msg) {
+  initStatus.className = "init-status error";
+  initStatus.textContent = msg;
+}
+
+// ── Render model list ──────────────────────────────────────────────────────────
+async function renderModels() {
+  let models;
+  try {
+    models = await localai.models();
+  } catch (e) {
+    log(`models() failed: ${e.message}`, "err");
     return;
   }
 
-  // Model list received
-  if (msg.type === "LOCALAI_MODELS") {
-    modelSelect.innerHTML = "";
+  modelList.innerHTML = "";
+  modelSelect.innerHTML = "";
 
-    if (msg.models.length === 0) {
-      modelSelect.innerHTML = '<option value="">No models downloaded — visit dashboard first</option>';
-      setStatus("error", "No models found. Download one at localhost:5173");
-      return;
-    }
+  if (models.length === 0) {
+    modelList.innerHTML = `<div class="panel-empty">No cached models found. Download one from the dashboard.</div>`;
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "— none cached —";
+    modelSelect.appendChild(opt);
+    btnRun.disabled = true;
+    return;
+  }
 
-    msg.models.forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.name;
-      modelSelect.appendChild(opt);
+  models.forEach((m) => {
+    // Panel row
+    const row = document.createElement("div");
+    row.className = "panel-row";
+    row.innerHTML = `
+      <div class="model-dot"></div>
+      <span class="model-name">${escHtml(m.name)}</span>
+      <span class="model-id">${escHtml(m.id)}</span>
+      ${m.default ? `<span class="tag tag--default">default</span>` : ""}
+      <button class="btn btn--green" data-id="${escHtml(m.id)}" data-name="${escHtml(m.name)}"
+        style="font-size:10px; padding:3px 10px;"
+        ${m.default ? "disabled" : ""}>
+        ${m.default ? "✓ default" : "set default"}
+      </button>
+    `;
+    modelList.appendChild(row);
+
+    // Select option
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.name + (m.default ? " (default)" : "");
+    if (m.default) opt.selected = true;
+    modelSelect.appendChild(opt);
+  });
+
+  btnRun.disabled = false;
+
+  // Wire up "set default" buttons
+  modelList.querySelectorAll("button[data-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id   = btn.dataset.id;
+      const name = btn.dataset.name;
+      try {
+        await localai.setDefaultModel(id);
+        log(`Default model set → ${name}`, "ok");
+        await renderModels();
+      } catch (e) {
+        log(`setDefaultModel failed: ${e.message}`, "err");
+      }
     });
-
-    modelSelect.disabled = false;
-    promptEl.disabled    = false;
-    runBtn.disabled      = false;
-    setStatus("ready", `${msg.models.length} model${msg.models.length > 1 ? "s" : ""} available`);
-    return;
-  }
-
-  // Model loading status
-  if (msg.type === "LOCALAI_STATUS") {
-    setStatus("loading", msg.message); // ← just use msg.message directly
-    return;
-  }
-
-  // Streaming token
-  if (msg.type === "LOCALAI_TOKEN") {
-    const req = pending[msg.id];
-    if (req) req.onToken(msg.token);
-    return;
-  }
-
-  // Inference done
-  if (msg.type === "LOCALAI_DONE") {
-    const req = pending[msg.id];
-    if (req) { req.resolve(); delete pending[msg.id]; }
-    return;
-  }
-
-  // Error
-  if (msg.type === "LOCALAI_ERROR") {
-    const req = pending[msg.id];
-    if (req) { req.reject(new Error(msg.message)); delete pending[msg.id]; }
-    return;
-  }
-});
-
-// ── 3. localai.prompt() — the function any site would call ───────────────────
-function prompt(text, modelId, onToken) {
-  return new Promise((resolve, reject) => {
-    if (!bridgeReady) return reject(new Error("Bridge not ready"));
-
-    const id = crypto.randomUUID();
-    pending[id] = { resolve, reject, onToken };
-
-    iframe.contentWindow.postMessage({
-      type: "LOCALAI_RUN",
-      id,
-      prompt: text,
-      modelId,
-    }, BRIDGE_ORIGIN);
   });
 }
 
-// ── 4. Run button ─────────────────────────────────────────────────────────────
-runBtn.addEventListener("click", async () => {
-  const modelId    = modelSelect.value;
-  const promptText = promptEl.value.trim();
-  if (!modelId || !promptText) return;
-
-  runBtn.disabled      = true;
-  responseBox.className = "response-box";
-  responseBox.textContent = "";
-  responseWrap.className  = "response-wrap visible";
-  setStatus("loading", "Running inference…");
+// ── Init ───────────────────────────────────────────────────────────────────────
+btnInit.addEventListener("click", async () => {
+  btnInit.disabled = true;
+  initStatus.className = "init-status pending";
+  initStatus.textContent = "Connecting…";
+  log("Calling localai.init()…");
 
   try {
-    await prompt(promptText, modelId, (token) => {
-      responseBox.textContent += token;
-    });
-    setStatus("ready", "Done");
-  } catch (err) {
-    responseBox.className   = "response-box error";
-    responseBox.textContent = err.message;
-    setStatus("error", "Inference failed");
-  } finally {
-    runBtn.disabled = false;
+    await localai.init();
+    setInitConnected("Connected ✓");
+    log("init() succeeded", "ok");
+    btnRefresh.disabled = false;
+    await renderModels();
+  } catch (e) {
+    setInitError(`Error: ${e.message}`);
+    log(`init() failed: ${e.message}`, "err");
+    btnInit.disabled = false;
   }
 });
-</script>
 
+// ── Reset permission ───────────────────────────────────────────────────────────
+btnResetPerm.addEventListener("click", () => {
+  localai.resetPermission();
+  initStatus.className = "init-status pending";
+  initStatus.textContent = "Permission reset — click Init to reconnect";
+  btnInit.disabled = false;
+  btnRefresh.disabled = true;
+  btnRun.disabled = true;
+  modelList.innerHTML = `<div class="panel-empty">Run Init to detect models.</div>`;
+  modelSelect.innerHTML = `<option value="">— none cached —</option>`;
+  log("Permission reset", "warn");
+});
+
+// ── Refresh ────────────────────────────────────────────────────────────────────
+btnRefresh.addEventListener("click", async () => {
+  log("Refreshing model list…");
+  await renderModels();
+  log("Model list refreshed", "ok");
+});
+
+// ── System prompt toggle ───────────────────────────────────────────────────────
+sysToggle.addEventListener("click", () => {
+  const open = sysWrap.classList.toggle("open");
+  sysToggle.textContent = open ? "▾ system prompt" : "▸ add system prompt";
+});
+
+// ── Run inference ──────────────────────────────────────────────────────────────
+btnRun.addEventListener("click", async () => {
+  const text = promptInput.value.trim();
+  if (!text) return;
+
+  const system = systemInput.value.trim();
+  const modelId = modelSelect.value;
+  const modelName = modelSelect.options[modelSelect.selectedIndex]?.text ?? "";
+
+  const messages = [];
+  if (system) messages.push({ role: "system", content: system });
+  messages.push({ role: "user", content: text });
+
+  // UI
+  outputBody.innerHTML = `<span class="cursor"></span>`;
+  setOutputStatus("running", "running…");
+  btnRun.disabled = true;
+  btnStop.disabled = false;
+  log(`Sending to ${modelName || modelId}…`, "info");
+
+  let tokens = "";
+  let wasAborted = false;
+
+  const { promise, abort } = localai.promptAbortable({
+    model: modelId || undefined,
+    messages,
+    onToken: (token) => {
+      tokens += token;
+      const cursor = outputBody.querySelector(".cursor");
+      if (cursor) {
+        cursor.insertAdjacentText("beforebegin", token);
+      } else {
+        outputBody.textContent = tokens;
+      }
+    },
+  });
+
+  currentAbort = () => { wasAborted = true; abort(); };
+
+  try {
+    await promise;
+    setOutputStatus(wasAborted ? "aborted" : "done", wasAborted ? "stopped" : "done");
+    log(wasAborted ? "Inference stopped by user" : `Done (${tokens.length} chars)`, wasAborted ? "warn" : "ok");
+  } catch (e) {
+    setOutputStatus("error", "error");
+    log(`Inference error: ${e.message}`, "err");
+    outputBody.textContent = `Error: ${e.message}`;
+  } finally {
+    // Remove blinking cursor
+    const cursor = outputBody.querySelector(".cursor");
+    if (cursor) cursor.remove();
+    btnRun.disabled = false;
+    btnStop.disabled = true;
+    currentAbort = null;
+  }
+});
+
+// ── Stop ───────────────────────────────────────────────────────────────────────
+btnStop.addEventListener("click", () => {
+  if (currentAbort) {
+    log("Abort requested…", "warn");
+    currentAbort();
+  }
+});
+
+// ── Clear output ───────────────────────────────────────────────────────────────
+btnClear.addEventListener("click", () => {
+  outputBody.innerHTML = `<span class="output-empty">Output will appear here…</span>`;
+  setOutputStatus("idle", "idle");
+});
+
+// ── Copy output ────────────────────────────────────────────────────────────────
+btnCopyOutput.addEventListener("click", () => {
+  const text = outputBody.textContent;
+  if (!text || text === "Output will appear here…") return;
+  navigator.clipboard.writeText(text).then(() => {
+    btnCopyOutput.textContent = "copied!";
+    setTimeout(() => { btnCopyOutput.textContent = "copy"; }, 1500);
+  });
+});
+
+// ── Keyboard shortcut: Ctrl+Enter to run ──────────────────────────────────────
+promptInput.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    if (!btnRun.disabled) btnRun.click();
+  }
+});
+
+log("Testbench ready. Click Init to connect.", "info");
+</script>
 </body>
 </html>
