@@ -546,7 +546,6 @@ $btnConnect.addEventListener("click", async () => {
     $btnRefresh.disabled  = false;
     $userInput.disabled   = false;
     $btnSend.disabled     = false;
-    $bridgeUrl.disabled   = true;
 
     clearWelcome();
     await refreshModels();
@@ -577,7 +576,6 @@ $btnDisc.addEventListener("click", () => {
   $userInput.disabled   = true;
   $btnSend.disabled     = true;
   $btnCancel.disabled   = true;
-  $bridgeUrl.disabled   = false;
 
   $modelList.innerHTML = `<p class="empty-state">Connect first to see models.</p>`;
 });
