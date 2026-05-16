@@ -3,743 +3,775 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LocalAI Testbench</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <title>LocalAI — test harness</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0d0d0d;
-      --surface:   #161616;
-      --border:    #2a2a2a;
-      --border2:   #333;
-      --text:      #e8e8e8;
-      --muted:     #666;
-      --dim:       #444;
-      --green:     #4ade80;
-      --green-dim: #166534;
-      --blue:      #60a5fa;
-      --orange:    #fb923c;
-      --red:       #f87171;
-      --yellow:    #fbbf24;
-      --mono:      'IBM Plex Mono', monospace;
-      --sans:      'IBM Plex Sans', sans-serif;
+      --bg:          #0e0e10;
+      --surface:     #18181c;
+      --surface-2:   #202026;
+      --border:      #2e2e38;
+      --border-2:    #3a3a48;
+      --text:        #e8e8f0;
+      --text-2:      #8888a0;
+      --text-3:      #555568;
+      --accent:      #7c6fff;
+      --accent-dim:  #2d2850;
+      --green:       #22c55e;
+      --green-dim:   #14291e;
+      --green-b:     #1a4a2e;
+      --red:         #f87171;
+      --red-dim:     #2a0a0a;
+      --orange:      #f97316;
+      --orange-dim:  #271600;
+      --blue:        #60a5fa;
+      --blue-dim:    #0e1d33;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
-    /* ── Layout ── */
-    .shell {
-      max-width: 780px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 40px 24px 80px;
-      flex: 1;
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
     }
 
     /* ── Header ── */
     .header {
-      display: flex;
-      align-items: baseline;
-      gap: 14px;
-      margin-bottom: 40px;
+      grid-column: 1 / -1;
+      padding: 20px 28px;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
-    .header-logo {
+    .header-tag {
       font-family: var(--mono);
-      font-size: 13px;
-      color: var(--green);
-      letter-spacing: 0.05em;
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: 2px 8px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
     }
 
-    .header-title {
-      font-size: 15px;
+    .header h1 {
+      font-size: 16px;
       font-weight: 500;
       color: var(--text);
     }
 
-    .header-version {
+    .header-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-family: var(--mono);
       font-size: 11px;
-      color: var(--muted);
-      margin-left: auto;
+      color: var(--text-3);
     }
 
-    /* ── Section ── */
-    .section {
-      margin-bottom: 32px;
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-3);
+      transition: background .3s;
+    }
+    .status-dot.connected  { background: var(--green);  animation: pulse 1.4s ease-in-out infinite; }
+    .status-dot.error      { background: var(--red); }
+    .status-dot.connecting { background: var(--orange); animation: pulse .8s ease-in-out infinite; }
+
+    @keyframes pulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:.4; transform:scale(.8); }
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      overflow-y: auto;
     }
 
     .section-label {
       font-family: var(--mono);
       font-size: 10px;
-      letter-spacing: 0.12em;
+      letter-spacing: .12em;
       text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 12px;
+      color: var(--text-3);
+      margin-bottom: 8px;
     }
 
-    /* ── Panel ── */
-    .panel {
-      background: var(--surface);
+    .field { display: flex; flex-direction: column; gap: 5px; }
+
+    label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-2);
+    }
+
+    select, textarea {
+      background: var(--surface-2);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .panel-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .panel-row:last-child { border-bottom: none; }
-
-    .panel-empty {
-      padding: 16px;
-      font-size: 13px;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
-
-    /* ── Model row ── */
-    .model-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-    }
-
-    .model-name {
-      font-family: var(--mono);
-      font-size: 13px;
+      border-radius: 5px;
       color: var(--text);
-      flex: 1;
-    }
-
-    .model-id {
-      font-size: 11px;
-      color: var(--muted);
       font-family: var(--mono);
-    }
-
-    .tag {
-      font-family: var(--mono);
-      font-size: 10px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      border: 1px solid;
-      white-space: nowrap;
-    }
-
-    .tag--default {
-      color: var(--green);
-      border-color: var(--green-dim);
-      background: rgba(74,222,128,0.07);
-    }
-
-    /* ── Buttons ── */
-    .btn {
-      font-family: var(--mono);
-      font-size: 11px;
-      padding: 4px 12px;
-      border-radius: 4px;
-      border: 1px solid var(--border2);
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      transition: background 0.1s, border-color 0.1s, color 0.1s;
-      white-space: nowrap;
-    }
-
-    .btn:hover { background: #222; border-color: #555; }
-    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-    .btn--green {
-      border-color: var(--green-dim);
-      color: var(--green);
-    }
-    .btn--green:hover { background: rgba(74,222,128,0.08); border-color: var(--green); }
-
-    .btn--blue {
-      border-color: #1e3a5f;
-      color: var(--blue);
-    }
-    .btn--blue:hover { background: rgba(96,165,250,0.08); border-color: var(--blue); }
-
-    .btn--red {
-      border-color: #3f1515;
-      color: var(--red);
-    }
-    .btn--red:hover { background: rgba(248,113,113,0.08); border-color: var(--red); }
-
-    .btn--run {
-      padding: 8px 20px;
       font-size: 12px;
-    }
-
-    /* ── Prompt area ── */
-    .prompt-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .prompt-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .prompt-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      flex: 1;
-    }
-
-    .model-select {
-      font-family: var(--mono);
-      font-size: 11px;
-      background: #1e1e1e;
-      border: 1px solid var(--border2);
-      color: var(--text);
-      border-radius: 4px;
-      padding: 3px 8px;
-      cursor: pointer;
-    }
-
-    .model-select:focus { outline: 1px solid var(--blue); }
-
-    textarea {
-      width: 100%;
-      background: transparent;
-      border: none;
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.6;
-      padding: 14px 16px;
-      resize: vertical;
-      min-height: 90px;
+      padding: 7px 10px;
       outline: none;
+      transition: border-color .15s;
+      width: 100%;
     }
+    select:focus, textarea:focus { border-color: var(--accent); }
 
-    textarea::placeholder { color: var(--dim); }
-
-    .prompt-footer {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      border-top: 1px solid var(--border);
-    }
-
-    .system-toggle {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      cursor: pointer;
-      user-select: none;
-      transition: color 0.1s;
-    }
-    .system-toggle:hover { color: var(--text); }
-
-    .system-wrap {
-      padding: 0 16px 12px;
-      display: none;
-    }
-    .system-wrap.open { display: block; }
-
-    .system-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 6px;
-    }
-
-    textarea.system-ta {
-      min-height: 56px;
-      font-size: 12px;
-      padding: 8px 0;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      resize: none;
-    }
-
-    /* ── Output ── */
-    .output-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .output-toolbar {
+    .slider-row {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--border);
     }
 
-    .output-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
+    input[type=range] {
       flex: 1;
+      accent-color: var(--accent);
+      cursor: pointer;
     }
 
-    .output-status {
+    .slider-val {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-2);
+      min-width: 32px;
+      text-align: right;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 8px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border-2);
+      background: var(--surface-2);
+      color: var(--text-2);
+      cursor: pointer;
+      width: 100%;
+      transition: background .12s, border-color .12s, color .12s;
+      text-align: center;
+    }
+    .btn:hover { background: var(--surface); color: var(--text); border-color: var(--text-3); }
+
+    .btn--primary {
+      background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+    }
+    .btn--primary:hover { background: var(--accent); color: #fff; }
+
+    .btn--danger { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+    .btn--danger:hover { background: var(--red); color: #fff; }
+
+    .btn--ghost { background: transparent; border-color: var(--border); color: var(--text-3); }
+    .btn--ghost:hover { background: var(--surface-2); color: var(--text-2); }
+
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 6px; }
+
+    /* ── Chat area ── */
+    .chat-area {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 100%;
+    }
+
+    .message-role {
       font-family: var(--mono);
       font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-3);
     }
 
-    .status--idle     { color: var(--muted); }
-    .status--running  { color: var(--blue); }
-    .status--done     { color: var(--green); }
-    .status--aborted  { color: var(--orange); }
-    .status--error    { color: var(--red); }
+    .message--user .message-role  { color: var(--accent); }
+    .message--assistant .message-role { color: var(--green); }
+    .message--system .message-role { color: var(--orange); }
+    .message--error .message-role  { color: var(--red); }
 
-    .output-body {
-      padding: 16px;
-      font-family: var(--mono);
+    .message-body {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
       font-size: 13px;
-      line-height: 1.7;
-      color: var(--text);
-      min-height: 120px;
+      line-height: 1.65;
       white-space: pre-wrap;
       word-break: break-word;
     }
 
-    .output-empty {
-      color: var(--dim);
-    }
+    .message--user      .message-body { background: var(--accent-dim); border-color: #4a3ea0; }
+    .message--assistant .message-body { background: var(--green-dim);  border-color: var(--green-b); }
+    .message--error     .message-body { background: var(--red-dim);    border-color: #6a1a1a; color: var(--red); }
+    .message--system    .message-body { background: var(--orange-dim); border-color: #4a2800; font-family: var(--mono); font-size: 12px; }
 
     .cursor {
       display: inline-block;
-      width: 7px;
-      height: 14px;
-      background: var(--blue);
+      width: 8px; height: 14px;
+      background: var(--green);
+      border-radius: 2px;
       vertical-align: text-bottom;
-      animation: blink 0.9s steps(1) infinite;
-      margin-left: 1px;
+      margin-left: 2px;
+      animation: blink .85s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Input bar ── */
+    .input-bar {
+      border-top: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
     }
 
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0; }
+    .input-bar textarea {
+      flex: 1;
+      resize: none;
+      min-height: 42px;
+      max-height: 160px;
+      border-radius: 6px;
     }
 
-    /* ── Log ── */
+    .send-btn {
+      flex-shrink: 0;
+      width: 42px;
+      height: 42px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 18px;
+      cursor: pointer;
+      transition: background .12s, color .12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .send-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+    .send-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Model cards in sidebar ── */
+    .model-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      margin-bottom: 4px;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .model-pill:hover { border-color: var(--border-2); }
+    .model-pill.selected { border-color: var(--accent); background: var(--accent-dim); }
+    .model-pill-dot { width:5px; height:5px; border-radius:50%; background:var(--text-3); flex-shrink:0; }
+    .model-pill.default .model-pill-dot { background: var(--green); }
+    .model-pill-name { font-family:var(--mono); font-size:11px; color:var(--text-2); flex:1; }
+    .model-pill.selected .model-pill-name { color:var(--accent); }
+    .model-pill-badge {
+      font-family:var(--mono); font-size:9px; letter-spacing:.05em;
+      padding:1px 5px; border-radius:3px;
+      background:var(--green-dim); color:var(--green); border:1px solid var(--green-b);
+    }
+
+    .empty-state {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-3);
+      padding: 8px 0;
+    }
+
+    /* ── API log ── */
     .log {
       font-family: var(--mono);
       font-size: 11px;
-      color: var(--muted);
+      color: var(--text-3);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      max-height: 120px;
+      overflow-y: auto;
       line-height: 1.7;
     }
 
-    .log-line { display: flex; gap: 10px; padding: 1px 0; }
-    .log-time { color: var(--dim); flex-shrink: 0; }
-    .log-msg--ok  { color: var(--green); }
-    .log-msg--err { color: var(--red); }
-    .log-msg--info { color: var(--blue); }
-    .log-msg--warn { color: var(--orange); }
+    .log-line { display: block; }
+    .log-line.ok   { color: var(--green); }
+    .log-line.err  { color: var(--red); }
+    .log-line.info { color: var(--blue); }
 
-    .divider {
-      border: none;
-      border-top: 1px solid var(--border);
-      margin: 32px 0;
+    /* ── Welcome ── */
+    .welcome {
+      margin: auto;
+      text-align: center;
+      padding: 48px 24px;
+      max-width: 360px;
     }
-
-    /* ── Init bar ── */
-    .init-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 24px;
-    }
-
-    .init-status {
-      font-family: var(--mono);
-      font-size: 12px;
-      flex: 1;
-    }
-
-    .init-status.connected { color: var(--green); }
-    .init-status.error     { color: var(--red); }
-    .init-status.pending   { color: var(--muted); }
+    .welcome-icon { font-size: 36px; margin-bottom: 16px; }
+    .welcome h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+    .welcome p  { font-size: 13px; color: var(--text-2); line-height: 1.7; }
   </style>
 </head>
 <body>
-<div class="shell">
+
+<div class="layout">
 
   <!-- Header -->
-  <div class="header">
-    <span class="header-logo">◆ LocalAI</span>
-    <span class="header-title">Testbench</span>
-    <span class="header-version">v0.2</span>
-  </div>
-
-  <!-- Init bar -->
-  <div class="init-bar">
-    <span class="init-status pending" id="initStatus">Not connected — click Init to start</span>
-    <button class="btn btn--green" id="btnInit">Init</button>
-    <button class="btn" id="btnResetPerm" title="Reset stored permission">Reset perm</button>
-  </div>
-
-  <!-- Models section -->
-  <div class="section">
-    <div class="section-label">Cached models</div>
-    <div class="panel" id="modelList">
-      <div class="panel-empty">Run Init to detect models.</div>
+  <header class="header">
+    <span class="header-tag">LocalAI</span>
+    <h1>Test harness</h1>
+    <div class="header-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">disconnected</span>
     </div>
-    <div style="margin-top:8px; display:flex; gap:8px;">
-      <button class="btn btn--blue" id="btnRefresh" disabled>↻ Refresh list</button>
-    </div>
-  </div>
+  </header>
 
-  <hr class="divider" />
+  <!-- Sidebar -->
+  <aside class="sidebar">
 
-  <!-- Prompt section -->
-  <div class="section">
-    <div class="section-label">Inference</div>
-
-    <div class="prompt-wrap">
-      <div class="prompt-toolbar">
-        <span class="prompt-label">system</span>
-        <span class="system-toggle" id="sysToggle">▸ add system prompt</span>
+    <!-- Connection -->
+    <div>
+      <p class="section-label">Connection</p>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Bridge URL</label>
+        <input
+          type="text"
+          id="bridge-url"
+          value="http://localhost:5173/bridge.html"
+          style="
+            background:var(--surface-2);border:1px solid var(--border);
+            border-radius:5px;color:var(--text);font-family:var(--mono);
+            font-size:12px;padding:7px 10px;outline:none;width:100%;
+            transition:border-color .15s;
+          "
+        />
       </div>
-      <div class="system-wrap" id="sysWrap">
-        <div class="system-label">System</div>
-        <textarea class="system-ta" id="systemInput" placeholder="You are a helpful assistant."></textarea>
-      </div>
-
-      <div class="prompt-toolbar" style="border-top: 1px solid var(--border); margin-top:0;">
-        <span class="prompt-label">model</span>
-        <select class="model-select" id="modelSelect">
-          <option value="">— none cached —</option>
-        </select>
-      </div>
-
-      <textarea id="promptInput" placeholder="Type a message and press Run…" rows="4"></textarea>
-
-      <div class="prompt-footer">
-        <button class="btn btn--green btn--run" id="btnRun" disabled>▶ Run</button>
-        <button class="btn btn--red btn--run" id="btnStop" disabled>■ Stop</button>
-        <button class="btn" id="btnClear" style="margin-left:auto;">Clear</button>
+      <div class="btn-row">
+        <button class="btn btn--primary" id="btn-connect">Connect</button>
+        <button class="btn btn--ghost"   id="btn-disconnect" disabled>Disconnect</button>
       </div>
     </div>
-  </div>
 
-  <!-- Output section -->
-  <div class="section">
-    <div class="section-label">Output</div>
-    <div class="output-wrap">
-      <div class="output-toolbar">
-        <span class="output-label">response</span>
-        <span class="output-status status--idle" id="outputStatus">idle</span>
-        <button class="btn" id="btnCopyOutput" style="font-size:10px; padding:2px 8px;">copy</button>
+    <!-- Available models -->
+    <div>
+      <p class="section-label">Available models</p>
+      <div id="model-list">
+        <p class="empty-state">Connect first to see models.</p>
       </div>
-      <div class="output-body" id="outputBody">
-        <span class="output-empty">Output will appear here…</span>
+      <button class="btn btn--ghost" id="btn-refresh" disabled style="margin-top:6px;">
+        ↺ Refresh
+      </button>
+    </div>
+
+    <!-- Generation params -->
+    <div>
+      <p class="section-label">Parameters</p>
+      <div class="field" style="margin-bottom:10px;">
+        <label>System prompt</label>
+        <textarea id="system-prompt" rows="3" style="resize:vertical;">You are a helpful assistant. Be concise.</textarea>
+      </div>
+      <div class="field" style="margin-bottom:8px;">
+        <label>Max tokens</label>
+        <div class="slider-row">
+          <input type="range" id="max-tokens" min="32" max="1024" step="32" value="256" />
+          <span class="slider-val" id="max-tokens-val">256</span>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:8px;">
+        <label>Temperature</label>
+        <div class="slider-row">
+          <input type="range" id="temperature" min="0" max="2" step="0.05" value="0.7" />
+          <span class="slider-val" id="temperature-val">0.70</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Top-p</label>
+        <div class="slider-row">
+          <input type="range" id="top-p" min="0" max="1" step="0.05" value="0.9" />
+          <span class="slider-val" id="top-p-val">0.90</span>
+        </div>
       </div>
     </div>
-  </div>
 
-  <hr class="divider" />
-
-  <!-- Event log -->
-  <div class="section">
-    <div class="section-label">Event log</div>
-    <div class="panel" style="padding: 12px 16px; max-height: 220px; overflow-y: auto;">
-      <div class="log" id="logEl"></div>
+    <!-- Actions -->
+    <div>
+      <p class="section-label">Actions</p>
+      <button class="btn btn--ghost"   id="btn-clear"   style="margin-bottom:6px;">Clear chat</button>
+      <button class="btn btn--danger"  id="btn-cancel"  disabled>Cancel generation</button>
     </div>
-  </div>
+
+    <!-- API log -->
+    <div>
+      <p class="section-label">API log</p>
+      <div class="log" id="api-log"></div>
+    </div>
+
+  </aside>
+
+  <!-- Chat area -->
+  <main class="chat-area">
+    <div class="messages" id="messages">
+      <div class="welcome">
+        <div class="welcome-icon">⚡</div>
+        <h2>LocalAI test harness</h2>
+        <p>
+          Enter your bridge URL, click <strong>Connect</strong>, then start chatting
+          with your locally-cached models — no API keys, no network calls.
+        </p>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <textarea
+        id="user-input"
+        placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+        rows="1"
+        disabled
+      ></textarea>
+      <button class="send-btn" id="btn-send" disabled title="Send">➤</button>
+    </div>
+  </main>
 
 </div>
 
 <script type="module">
-import localai from "./localai.js";
+import { LocalAI } from "./localai.js";
 
-// ── Refs ───────────────────────────────────────────────────────────────────────
-const initStatus   = document.getElementById("initStatus");
-const btnInit      = document.getElementById("btnInit");
-const btnResetPerm = document.getElementById("btnResetPerm");
-const btnRefresh   = document.getElementById("btnRefresh");
-const modelList    = document.getElementById("modelList");
-const modelSelect  = document.getElementById("modelSelect");
-const sysToggle    = document.getElementById("sysToggle");
-const sysWrap      = document.getElementById("sysWrap");
-const systemInput  = document.getElementById("systemInput");
-const promptInput  = document.getElementById("promptInput");
-const btnRun       = document.getElementById("btnRun");
-const btnStop      = document.getElementById("btnStop");
-const btnClear     = document.getElementById("btnClear");
-const outputBody   = document.getElementById("outputBody");
-const outputStatus = document.getElementById("outputStatus");
-const btnCopyOutput= document.getElementById("btnCopyOutput");
-const logEl        = document.getElementById("logEl");
+// ── State ──────────────────────────────────────────────────────────────────────
 
-let currentAbort = null; // fn to abort running inference
+let ai             = null;
+let selectedModel  = null;  // id of the model selected in the sidebar
+let generating     = false;
+let currentRunId   = null;
+let conversationHistory = [];   // [{role, content}, ...]
+
+// ── DOM refs ───────────────────────────────────────────────────────────────────
+
+const $bridgeUrl   = document.getElementById("bridge-url");
+const $statusDot   = document.getElementById("status-dot");
+const $statusText  = document.getElementById("status-text");
+const $modelList   = document.getElementById("model-list");
+const $messages    = document.getElementById("messages");
+const $userInput   = document.getElementById("user-input");
+const $btnConnect  = document.getElementById("btn-connect");
+const $btnDisc     = document.getElementById("btn-disconnect");
+const $btnRefresh  = document.getElementById("btn-refresh");
+const $btnSend     = document.getElementById("btn-send");
+const $btnCancel   = document.getElementById("btn-cancel");
+const $btnClear    = document.getElementById("btn-clear");
+const $apiLog      = document.getElementById("api-log");
+const $maxTokens   = document.getElementById("max-tokens");
+const $temperature = document.getElementById("temperature");
+const $topP        = document.getElementById("top-p");
+const $systemPmt   = document.getElementById("system-prompt");
 
 // ── Logging ────────────────────────────────────────────────────────────────────
-function log(msg, type = "info") {
-  const now = new Date().toTimeString().slice(0, 8);
-  const line = document.createElement("div");
-  line.className = "log-line";
-  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg--${type}">${escHtml(msg)}</span>`;
-  logEl.appendChild(line);
-  logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
-}
 
-function escHtml(s) {
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function log(msg, kind = "info") {
+  const ts   = new Date().toLocaleTimeString("en", { hour12: false });
+  const line = document.createElement("span");
+  line.className = `log-line ${kind}`;
+  line.textContent = `[${ts}] ${msg}`;
+  $apiLog.appendChild(line);
+  $apiLog.appendChild(document.createElement("br"));
+  $apiLog.scrollTop = $apiLog.scrollHeight;
 }
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
-function setOutputStatus(state, text) {
-  outputStatus.className = `output-status status--${state}`;
-  outputStatus.textContent = text;
+
+function setStatus(state, label) {
+  $statusDot.className  = `status-dot ${state}`;
+  $statusText.textContent = label;
 }
 
-function setInitConnected(msg) {
-  initStatus.className = "init-status connected";
-  initStatus.textContent = msg;
-}
+// ── Slider labels ──────────────────────────────────────────────────────────────
 
-function setInitError(msg) {
-  initStatus.className = "init-status error";
-  initStatus.textContent = msg;
-}
+$maxTokens.addEventListener("input",   () => document.getElementById("max-tokens-val").textContent  = $maxTokens.value);
+$temperature.addEventListener("input", () => document.getElementById("temperature-val").textContent = parseFloat($temperature.value).toFixed(2));
+$topP.addEventListener("input",        () => document.getElementById("top-p-val").textContent       = parseFloat($topP.value).toFixed(2));
 
-// ── Render model list ──────────────────────────────────────────────────────────
-async function renderModels() {
-  let models;
+// ── Auto-grow textarea ─────────────────────────────────────────────────────────
+
+$userInput.addEventListener("input", () => {
+  $userInput.style.height = "auto";
+  $userInput.style.height = Math.min($userInput.scrollHeight, 160) + "px";
+});
+
+// ── Connect ────────────────────────────────────────────────────────────────────
+
+$btnConnect.addEventListener("click", async () => {
+  const url = $bridgeUrl.value.trim();
+  if (!url) { log("Bridge URL is empty.", "err"); return; }
+
+  $btnConnect.disabled = true;
+  setStatus("connecting", "connecting…");
+  log(`Connecting to ${url}…`);
+
+  ai = new LocalAI({ bridgeUrl: url });
+
   try {
-    models = await localai.models();
-  } catch (e) {
-    log(`models() failed: ${e.message}`, "err");
+    await ai.connect();
+    setStatus("connected", "connected");
+    log("Handshake complete.", "ok");
+
+    $btnConnect.disabled  = false;
+    $btnDisc.disabled     = false;
+    $btnRefresh.disabled  = false;
+    $userInput.disabled   = false;
+    $btnSend.disabled     = false;
+    $bridgeUrl.disabled   = true;
+
+    clearWelcome();
+    await refreshModels();
+
+  } catch (err) {
+    setStatus("error", "error");
+    log(err.message, "err");
+    addSystemMessage(`Connection failed: ${err.message}`, "error");
+    ai = null;
+    $btnConnect.disabled = false;
+  }
+});
+
+// ── Disconnect ─────────────────────────────────────────────────────────────────
+
+$btnDisc.addEventListener("click", () => {
+  if (!ai) return;
+  ai.disconnect();
+  ai = null;
+  selectedModel = null;
+
+  setStatus("", "disconnected");
+  log("Disconnected.");
+
+  $btnConnect.disabled  = false;
+  $btnDisc.disabled     = true;
+  $btnRefresh.disabled  = true;
+  $userInput.disabled   = true;
+  $btnSend.disabled     = true;
+  $btnCancel.disabled   = true;
+  $bridgeUrl.disabled   = false;
+
+  $modelList.innerHTML = `<p class="empty-state">Connect first to see models.</p>`;
+});
+
+// ── Refresh models ─────────────────────────────────────────────────────────────
+
+async function refreshModels() {
+  log("Fetching model list…");
+  try {
+    const models = await ai.getModels();
+    log(`${models.length} model(s) cached.`, "ok");
+    renderModels(models);
+
+    // Auto-select the default
+    const def = models.find((m) => m.isDefault);
+    if (def) selectedModel = def.id;
+
+  } catch (err) {
+    log(`getModels() failed: ${err.message}`, "err");
+  }
+}
+
+$btnRefresh.addEventListener("click", refreshModels);
+
+function renderModels(models) {
+  if (!models.length) {
+    $modelList.innerHTML = `<p class="empty-state">No models downloaded yet.</p>`;
     return;
   }
 
-  modelList.innerHTML = "";
-  modelSelect.innerHTML = "";
-
-  if (models.length === 0) {
-    modelList.innerHTML = `<div class="panel-empty">No cached models found. Download one from the dashboard.</div>`;
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "— none cached —";
-    modelSelect.appendChild(opt);
-    btnRun.disabled = true;
-    return;
-  }
-
-  models.forEach((m) => {
-    // Panel row
-    const row = document.createElement("div");
-    row.className = "panel-row";
-    row.innerHTML = `
-      <div class="model-dot"></div>
-      <span class="model-name">${escHtml(m.name)}</span>
-      <span class="model-id">${escHtml(m.id)}</span>
-      ${m.default ? `<span class="tag tag--default">default</span>` : ""}
-      <button class="btn btn--green" data-id="${escHtml(m.id)}" data-name="${escHtml(m.name)}"
-        style="font-size:10px; padding:3px 10px;"
-        ${m.default ? "disabled" : ""}>
-        ${m.default ? "✓ default" : "set default"}
-      </button>
+  $modelList.innerHTML = "";
+  for (const m of models) {
+    const pill = document.createElement("div");
+    pill.className = `model-pill${m.isDefault ? " default" : ""}${selectedModel === m.id ? " selected" : ""}`;
+    pill.innerHTML = `
+      <div class="model-pill-dot"></div>
+      <span class="model-pill-name">${m.name}</span>
+      ${m.isDefault ? `<span class="model-pill-badge">default</span>` : ""}
     `;
-    modelList.appendChild(row);
-
-    // Select option
-    const opt = document.createElement("option");
-    opt.value = m.id;
-    opt.textContent = m.name + (m.default ? " (default)" : "");
-    if (m.default) opt.selected = true;
-    modelSelect.appendChild(opt);
-  });
-
-  btnRun.disabled = false;
-
-  // Wire up "set default" buttons
-  modelList.querySelectorAll("button[data-id]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const id   = btn.dataset.id;
-      const name = btn.dataset.name;
-      try {
-        await localai.setDefaultModel(id);
-        log(`Default model set → ${name}`, "ok");
-        await renderModels();
-      } catch (e) {
-        log(`setDefaultModel failed: ${e.message}`, "err");
-      }
+    pill.addEventListener("click", () => {
+      selectedModel = m.id;
+      renderModels(models);  // re-render to update selection highlight
+      log(`Selected model: ${m.name}`);
     });
-  });
+    $modelList.appendChild(pill);
+  }
 }
 
-// ── Init ───────────────────────────────────────────────────────────────────────
-btnInit.addEventListener("click", async () => {
-  btnInit.disabled = true;
-  initStatus.className = "init-status pending";
-  initStatus.textContent = "Connecting…";
-  log("Calling localai.init()…");
+// ── Chat ───────────────────────────────────────────────────────────────────────
 
-  try {
-    await localai.init();
-    setInitConnected("Connected ✓");
-    log("init() succeeded", "ok");
-    btnRefresh.disabled = false;
-    await renderModels();
-  } catch (e) {
-    setInitError(`Error: ${e.message}`);
-    log(`init() failed: ${e.message}`, "err");
-    btnInit.disabled = false;
-  }
-});
+function clearWelcome() {
+  const welcome = $messages.querySelector(".welcome");
+  if (welcome) welcome.remove();
+}
 
-// ── Reset permission ───────────────────────────────────────────────────────────
-btnResetPerm.addEventListener("click", () => {
-  localai.resetPermission();
-  initStatus.className = "init-status pending";
-  initStatus.textContent = "Permission reset — click Init to reconnect";
-  btnInit.disabled = false;
-  btnRefresh.disabled = true;
-  btnRun.disabled = true;
-  modelList.innerHTML = `<div class="panel-empty">Run Init to detect models.</div>`;
-  modelSelect.innerHTML = `<option value="">— none cached —</option>`;
-  log("Permission reset", "warn");
-});
+function addMessage(role, content, streaming = false) {
+  const div = document.createElement("div");
+  div.className = `message message--${role}`;
+  div.innerHTML = `
+    <span class="message-role">${role}</span>
+    <div class="message-body">${escHtml(content)}${streaming ? '<span class="cursor"></span>' : ""}</div>
+  `;
+  $messages.appendChild(div);
+  $messages.scrollTop = $messages.scrollHeight;
+  return div.querySelector(".message-body");
+}
 
-// ── Refresh ────────────────────────────────────────────────────────────────────
-btnRefresh.addEventListener("click", async () => {
-  log("Refreshing model list…");
-  await renderModels();
-  log("Model list refreshed", "ok");
-});
+function addSystemMessage(text, kind = "system") {
+  const div = document.createElement("div");
+  div.className = `message message--${kind}`;
+  div.innerHTML = `
+    <span class="message-role">${kind === "error" ? "error" : "system"}</span>
+    <div class="message-body">${escHtml(text)}</div>
+  `;
+  $messages.appendChild(div);
+  $messages.scrollTop = $messages.scrollHeight;
+}
 
-// ── System prompt toggle ───────────────────────────────────────────────────────
-sysToggle.addEventListener("click", () => {
-  const open = sysWrap.classList.toggle("open");
-  sysToggle.textContent = open ? "▾ system prompt" : "▸ add system prompt";
-});
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
 
-// ── Run inference ──────────────────────────────────────────────────────────────
-btnRun.addEventListener("click", async () => {
-  const text = promptInput.value.trim();
+async function sendMessage() {
+  if (!ai || generating) return;
+
+  const text = $userInput.value.trim();
   if (!text) return;
 
-  const system = systemInput.value.trim();
-  const modelId = modelSelect.value;
-  const modelName = modelSelect.options[modelSelect.selectedIndex]?.text ?? "";
+  clearWelcome();
+  $userInput.value = "";
+  $userInput.style.height = "auto";
 
-  const messages = [];
-  if (system) messages.push({ role: "system", content: system });
-  messages.push({ role: "user", content: text });
+  // Add to UI and history
+  addMessage("user", text);
+  conversationHistory.push({ role: "user", content: text });
 
-  // UI
-  outputBody.innerHTML = `<span class="cursor"></span>`;
-  setOutputStatus("running", "running…");
-  btnRun.disabled = true;
-  btnStop.disabled = false;
-  log(`Sending to ${modelName || modelId}…`, "info");
+  // Build full message list (system + history)
+  const systemText = $systemPmt.value.trim();
+  const messages = [
+    ...(systemText ? [{ role: "system", content: systemText }] : []),
+    ...conversationHistory,
+  ];
 
-  let tokens = "";
-  let wasAborted = false;
+  // Start generating
+  generating = true;
+  $btnSend.disabled   = true;
+  $btnCancel.disabled = false;
+  $userInput.disabled = true;
 
-  const { promise, abort } = localai.promptAbortable({
-    model: modelId || undefined,
-    messages,
-    onToken: (token) => {
-      tokens += token;
-      const cursor = outputBody.querySelector(".cursor");
-      if (cursor) {
-        cursor.insertAdjacentText("beforebegin", token);
-      } else {
-        outputBody.textContent = tokens;
-      }
-    },
-  });
+  const bodyEl = addMessage("assistant", "", true);
 
-  currentAbort = () => { wasAborted = true; abort(); };
+  log(`run() → model=${selectedModel ?? "default"}, maxTokens=${$maxTokens.value}, temp=${$temperature.value}`);
 
   try {
-    await promise;
-    setOutputStatus(wasAborted ? "aborted" : "done", wasAborted ? "stopped" : "done");
-    log(wasAborted ? "Inference stopped by user" : `Done (${tokens.length} chars)`, wasAborted ? "warn" : "ok");
-  } catch (e) {
-    setOutputStatus("error", "error");
-    log(`Inference error: ${e.message}`, "err");
-    outputBody.textContent = `Error: ${e.message}`;
-  } finally {
-    // Remove blinking cursor
-    const cursor = outputBody.querySelector(".cursor");
-    if (cursor) cursor.remove();
-    btnRun.disabled = false;
-    btnStop.disabled = true;
-    currentAbort = null;
+    const { id, text: fullText } = await ai.run({
+      messages,
+      modelId:     selectedModel ?? undefined,
+      maxTokens:   parseInt($maxTokens.value),
+      temperature: parseFloat($temperature.value),
+      top_p:       parseFloat($topP.value),
+      onToken: (token) => {
+        // Remove cursor, append token, re-add cursor
+        const cursor = bodyEl.querySelector(".cursor");
+        if (cursor) cursor.remove();
+        bodyEl.textContent += token;
+        bodyEl.innerHTML += '<span class="cursor"></span>';
+        $messages.scrollTop = $messages.scrollHeight;
+      },
+    });
+
+    currentRunId = id;
+
+    // Finalise: strip cursor
+    bodyEl.querySelector(".cursor")?.remove();
+
+    conversationHistory.push({ role: "assistant", content: fullText });
+    log(`Done. ${fullText.length} chars.`, "ok");
+
+  } catch (err) {
+    bodyEl.querySelector(".cursor")?.remove();
+    bodyEl.textContent = `[error: ${err.message}]`;
+    bodyEl.closest(".message").classList.add("message--error");
+    log(err.message, "err");
+  }
+
+  generating      = false;
+  currentRunId    = null;
+  $btnSend.disabled   = false;
+  $btnCancel.disabled = true;
+  $userInput.disabled = false;
+  $userInput.focus();
+}
+
+$btnSend.addEventListener("click", sendMessage);
+
+$userInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
   }
 });
 
-// ── Stop ───────────────────────────────────────────────────────────────────────
-btnStop.addEventListener("click", () => {
-  if (currentAbort) {
-    log("Abort requested…", "warn");
-    currentAbort();
-  }
+// ── Cancel ─────────────────────────────────────────────────────────────────────
+
+$btnCancel.addEventListener("click", () => {
+  if (!generating || !currentRunId) return;
+  ai.cancel(currentRunId);
+  log(`Cancelled request ${currentRunId}.`, "info");
 });
 
-// ── Clear output ───────────────────────────────────────────────────────────────
-btnClear.addEventListener("click", () => {
-  outputBody.innerHTML = `<span class="output-empty">Output will appear here…</span>`;
-  setOutputStatus("idle", "idle");
-});
+// ── Clear chat ─────────────────────────────────────────────────────────────────
 
-// ── Copy output ────────────────────────────────────────────────────────────────
-btnCopyOutput.addEventListener("click", () => {
-  const text = outputBody.textContent;
-  if (!text || text === "Output will appear here…") return;
-  navigator.clipboard.writeText(text).then(() => {
-    btnCopyOutput.textContent = "copied!";
-    setTimeout(() => { btnCopyOutput.textContent = "copy"; }, 1500);
-  });
+$btnClear.addEventListener("click", () => {
+  conversationHistory = [];
+  $messages.innerHTML = "";
+  log("Chat cleared.");
 });
-
-// ── Keyboard shortcut: Ctrl+Enter to run ──────────────────────────────────────
-promptInput.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-    if (!btnRun.disabled) btnRun.click();
-  }
-});
-
-log("Testbench ready. Click Init to connect.", "info");
 </script>
 </body>
 </html>
