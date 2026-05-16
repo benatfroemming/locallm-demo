@@ -376,20 +376,6 @@
     <!-- Connection -->
     <div>
       <p class="section-label">Connection</p>
-      <div class="field" style="margin-bottom:10px;">
-        <label>Bridge URL</label>
-        <input
-          type="text"
-          id="bridge-url"
-          value="http://localhost:5173/bridge.html"
-          style="
-            background:var(--surface-2);border:1px solid var(--border);
-            border-radius:5px;color:var(--text);font-family:var(--mono);
-            font-size:12px;padding:7px 10px;outline:none;width:100%;
-            transition:border-color .15s;
-          "
-        />
-      </div>
       <div class="btn-row">
         <button class="btn btn--primary" id="btn-connect">Connect</button>
         <button class="btn btn--ghost"   id="btn-disconnect" disabled>Disconnect</button>
@@ -491,7 +477,7 @@ let conversationHistory = [];   // [{role, content}, ...]
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 
-const $bridgeUrl   = document.getElementById("bridge-url");
+const BRIDGE_URL = "https://benatfroemming.github.io/locallm/bridge.html";
 const $statusDot   = document.getElementById("status-dot");
 const $statusText  = document.getElementById("status-text");
 const $modelList   = document.getElementById("model-list");
@@ -544,14 +530,11 @@ $userInput.addEventListener("input", () => {
 // ── Connect ────────────────────────────────────────────────────────────────────
 
 $btnConnect.addEventListener("click", async () => {
-  const url = $bridgeUrl.value.trim();
-  if (!url) { log("Bridge URL is empty.", "err"); return; }
-
   $btnConnect.disabled = true;
   setStatus("connecting", "connecting…");
-  log(`Connecting to ${url}…`);
+  log(`Connecting to ${BRIDGE_URL}…`);
 
-  ai = new LocalAI({ bridgeUrl: url });
+  ai = new LocalAI({ bridgeUrl: BRIDGE_URL });
 
   try {
     await ai.connect();
