@@ -24,8 +24,9 @@
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const PERMISSION_KEY   = "localai_permission";   // sessionStorage key
-const HANDSHAKE_TIMEOUT = 8_000;                 // ms to wait for LOCALAI_READY
+const PERMISSION_KEY    = "localai_permission";   // sessionStorage key
+const HANDSHAKE_TIMEOUT = 12_000;                 // ms to wait for LOCALAI_READY
+const INIT_RETRY_MS     = 200;                    // how often to resend LOCALAI_INIT
 const REQUEST_TIMEOUT   = 120_000;               // ms before auto-cancelling run()
 const IFRAME_STYLE      = [
   "position:fixed", "top:-9999px", "left:-9999px",
@@ -171,40 +172,42 @@ export class LocalAI {
     }
 
     // ── 2. Create iframe ───────────────────────────────────────────────────
+    // No sandbox attribute: sandbox + allow-same-origin on a cross-origin
+    // iframe silently prevents postMessage from working in many browsers.
+    // The bridge origin-locks itself after the first LOCALAI_INIT anyway.
 
     this._iframe = document.createElement("iframe");
     this._iframe.setAttribute("style", IFRAME_STYLE);
-    this._iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
     this._iframe.src = this._bridgeUrl;
 
     window.addEventListener("message", this._onMessage);
     document.body.appendChild(this._iframe);
 
-    // ── 3. Wait for iframe load, then send LOCALAI_INIT ────────────────────
+    // ── 3. LOCALAI_INIT → wait for LOCALAI_READY ──────────────────────────
+    // We don't wait for the iframe "load" event before starting — on
+    // cross-origin iframes the load event fires before the inline <script>
+    // has registered its message listener. Instead we retry LOCALAI_INIT
+    // every INIT_RETRY_MS until the bridge echoes back LOCALAI_READY.
 
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error("LocalAI: bridge iframe failed to load."));
+      let retryInterval = null;
+
+      const deadline = setTimeout(() => {
+        clearInterval(retryInterval);
+        const blocked =
+          "LocalAI: handshake timed out. Possible causes:\n" +
+          "  • The bridge URL is wrong or the page isn't deployed\n" +
+          "  • The server returned X-Frame-Options: DENY (can't embed as iframe)\n" +
+          "  • A network error prevented the iframe from loading\n" +
+          "Check the browser console / Network tab for more detail.";
+        reject(new Error(blocked));
       }, HANDSHAKE_TIMEOUT);
 
-      this._iframe.addEventListener("load", () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
-    });
-
-    // ── 4. LOCALAI_INIT → wait for LOCALAI_READY ──────────────────────────
-
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error("LocalAI: handshake timed out — bridge did not respond."));
-      }, HANDSHAKE_TIMEOUT);
-
-      // Temporarily listen for LOCALAI_READY before _ready is set
       const listener = (e) => {
         if (e.origin !== this._bridgeOrigin) return;
         if (e.data?.type === "LOCALAI_READY") {
-          clearTimeout(timer);
+          clearTimeout(deadline);
+          clearInterval(retryInterval);
           window.removeEventListener("message", listener);
           this._ready = true;
           resolve();
@@ -212,10 +215,19 @@ export class LocalAI {
       };
       window.addEventListener("message", listener);
 
-      // Initiate handshake — bridge locks our origin after this
-      this._iframe.contentWindow.postMessage(
-        { type: "LOCALAI_INIT" },
-        this._bridgeOrigin
+      // Send LOCALAI_INIT repeatedly. The first one that arrives after the
+      // bridge script has loaded will get the LOCALAI_READY response.
+      // contentWindow may be null for a split-second — guard with ?.
+      function sendInit(iframe, bridgeOrigin) {
+        try {
+          iframe.contentWindow?.postMessage({ type: "LOCALAI_INIT" }, bridgeOrigin);
+        } catch (_) { /* cross-origin access before load — ignore */ }
+      }
+
+      sendInit(this._iframe, this._bridgeOrigin);
+      retryInterval = setInterval(
+        () => sendInit(this._iframe, this._bridgeOrigin),
+        INIT_RETRY_MS
       );
     });
   }
