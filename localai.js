@@ -1,357 +1,454 @@
 /**
  * localai.js
- * Client library for LocalAI — browser-side local model inference.
+ *
+ * A zero-dependency browser library that lets any web page talk to a user's
+ * locally-cached AI models via the LocalAI dashboard bridge.
  *
  * Usage:
- *   import { localai } from "./localai.js"
- *
- *   await localai.init()
- *   const models  = await localai.models()
- *   const def     = await localai.defaultModel()
- *   await localai.setDefaultModel("SmolLM2 135M")
- *   const reply   = await localai.prompt({ messages: [...] })
- *   const { promise, abort } = localai.promptAbortable({ messages: [...], onToken: (t) => ... })
- *   abort()               // stop mid-stream; promise still resolves with partial text
+ *   const ai = new LocalAI({ bridgeUrl: "http://localhost:5173/bridge.html" });
+ *   await ai.connect();                      // asks permission, then handshakes
+ *   const models = await ai.getModels();     // [{ id, name, isDefault }, ...]
+ *   const def    = await ai.getDefault();    // { id, name, isDefault } | null
+ *   const text   = await ai.run({
+ *     messages: [{ role: "user", content: "Hello!" }],
+ *     modelId:  "HuggingFaceTB/SmolLM2-135M-Instruct",
+ *     maxTokens: 200,
+ *     temperature: 0.7,
+ *     onToken: (t) => process.stdout.write(t),
+ *   });
+ *   ai.cancel(requestId);                    // abort an in-flight run()
+ *   ai.disconnect();                         // tear everything down
  */
 
-// ── Config ────────────────────────────────────────────────────────────────────
+"use strict";
 
-const BRIDGE_ORIGIN = "https://benatfroemming.github.io";
-const BRIDGE_URL    = `${BRIDGE_ORIGIN}/locallm/bridge.html`;
+// ── Constants ──────────────────────────────────────────────────────────────────
 
-const PERM_KEY = () => `localai_perm_${window.location.origin}`;
+const PERMISSION_KEY   = "localai_permission";   // sessionStorage key
+const HANDSHAKE_TIMEOUT = 8_000;                 // ms to wait for LOCALAI_READY
+const REQUEST_TIMEOUT   = 120_000;               // ms before auto-cancelling run()
+const IFRAME_STYLE      = [
+  "position:fixed", "top:-9999px", "left:-9999px",
+  "width:1px",      "height:1px",  "border:none",
+  "pointer-events:none", "visibility:hidden",
+].join(";");
 
-// ── Internal state ────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-let _iframe      = null;
-let _ready       = false;
-let _readyQueue  = [];
-let _pending     = {};
-let _initPromise = null;
+function uid() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
-// ── postMessage listener ──────────────────────────────────────────────────────
+// ── Permission UI ──────────────────────────────────────────────────────────────
 
-window.addEventListener("message", (e) => {
-  if (e.origin !== BRIDGE_ORIGIN) return;
-  const msg = e.data;
-  if (!msg?.type) return;
-
-  if (msg.type === "LOCALAI_READY") {
-    _ready = true;
-    _readyQueue.forEach((fn) => fn());
-    _readyQueue = [];
-    return;
-  }
-
-  if (msg.type === "LOCALAI_MODELS") {
-    const listReq = _pending["__list__"];
-    if (listReq) {
-      listReq.resolve(msg.models);
-      delete _pending["__list__"];
-    }
-    return;
-  }
-
-  if (msg.type === "LOCALAI_DEFAULT_SET") {
-    const req = _pending["__setdefault__"];
-    if (req) {
-      req.resolve(msg.modelId);
-      delete _pending["__setdefault__"];
-    }
-    return;
-  }
-
-  const req = _pending[msg.id];
-  if (!req) return;
-
-  if (msg.type === "LOCALAI_STATUS") return;
-
-  if (msg.type === "LOCALAI_TOKEN") {
-    if (typeof req.onToken === "function") req.onToken(msg.token);
-    req._chunks.push(msg.token);
-    return;
-  }
-
-  if (msg.type === "LOCALAI_DONE") {
-    req.resolve(req._chunks.join(""));
-    delete _pending[msg.id];
-    return;
-  }
-
-  if (msg.type === "LOCALAI_ERROR") {
-    req.reject(new Error(msg.message));
-    delete _pending[msg.id];
-    return;
-  }
-});
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function _waitForBridge() {
+/**
+ * Shows an accessible, no-dependency permission dialog.
+ * Returns a Promise that resolves true (grant) or false (deny).
+ */
+function showPermissionDialog(origin) {
   return new Promise((resolve) => {
-    if (_ready) return resolve();
-    _readyQueue.push(resolve);
-  });
-}
-
-function _injectBridge() {
-  if (_iframe) return;
-  _iframe = document.createElement("iframe");
-  _iframe.src = BRIDGE_URL;
-  _iframe.style.cssText = "display:none;position:absolute;width:0;height:0;border:0";
-  _iframe.sandbox = "allow-scripts allow-same-origin";
-  _iframe.addEventListener("load", () => {
-    _iframe.contentWindow.postMessage({ type: "LOCALAI_HELLO" }, BRIDGE_ORIGIN);
-  });
-  document.body.appendChild(_iframe);
-}
-
-async function _send(msg) {
-  await _waitForBridge();
-  _iframe.contentWindow.postMessage(msg, BRIDGE_ORIGIN);
-}
-
-function _askPermission() {
-  return new Promise((resolve) => {
+    // Overlay
     const overlay = document.createElement("div");
-    overlay.style.cssText = `
-      position: fixed; inset: 0; z-index: 2147483647;
-      background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
-      display: flex; align-items: center; justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    `;
+    Object.assign(overlay.style, {
+      position:       "fixed",
+      inset:          "0",
+      background:     "rgba(0,0,0,0.55)",
+      display:        "flex",
+      alignItems:     "center",
+      justifyContent: "center",
+      zIndex:         "2147483647",
+      fontFamily:     "system-ui, sans-serif",
+    });
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "lai-title");
+    overlay.setAttribute("aria-describedby", "lai-desc");
 
-    const box = document.createElement("div");
-    box.style.cssText = `
-      background: #fff; border-radius: 14px; padding: 28px 28px 22px;
-      max-width: 360px; width: calc(100% - 48px);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-    `;
+    // Card
+    overlay.innerHTML = `
+      <div style="
+        background:#fff; color:#111; border-radius:12px; padding:28px 32px;
+        max-width:400px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,.28);
+      ">
+        <p style="margin:0 0 6px;font-size:11px;letter-spacing:.08em;
+                  text-transform:uppercase;color:#888;font-weight:500;">
+          Local AI · permission request
+        </p>
+        <h2 id="lai-title" style="margin:0 0 12px;font-size:17px;font-weight:600;">
+          Allow access to local models?
+        </h2>
+        <p id="lai-desc" style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#444;">
+          <strong style="color:#111;">${origin}</strong> wants to run AI inference
+          using models you have downloaded in the LocalAI dashboard.
+          No data is sent to any server.
+        </p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="lai-deny"  style="
+            padding:9px 20px;border-radius:7px;border:1px solid #ddd;
+            background:#f5f5f5;color:#333;cursor:pointer;font-size:14px;font-weight:500;
+          ">Deny</button>
+          <button id="lai-grant" style="
+            padding:9px 20px;border-radius:7px;border:none;
+            background:#6f5ff6;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
+          ">Allow</button>
+        </div>
+      </div>`;
 
-    const icon = document.createElement("div");
-    icon.textContent = "🧠";
-    icon.style.cssText = "font-size: 28px; margin-bottom: 12px;";
-
-    const title = document.createElement("p");
-    title.textContent = "Allow local AI models?";
-    title.style.cssText = "font-size: 16px; font-weight: 600; color: #111; margin-bottom: 8px;";
-
-    const body = document.createElement("p");
-    body.innerHTML = `<strong>${window.location.hostname}</strong> wants to run inference using models cached in your browser. No data leaves your device.`;
-    body.style.cssText = "font-size: 13px; color: #555; line-height: 1.55; margin-bottom: 22px;";
-
-    const row = document.createElement("div");
-    row.style.cssText = "display: flex; gap: 10px;";
-
-    const btnAllow = document.createElement("button");
-    btnAllow.textContent = "Allow";
-    btnAllow.style.cssText = `
-      flex: 1; padding: 10px; border-radius: 8px; border: none;
-      background: #111; color: #fff; font-size: 14px; font-weight: 500;
-      cursor: pointer; font-family: inherit;
-    `;
-
-    const btnDeny = document.createElement("button");
-    btnDeny.textContent = "Don't allow";
-    btnDeny.style.cssText = `
-      flex: 1; padding: 10px; border-radius: 8px;
-      border: 1px solid #e5e7eb; background: #fff; color: #333;
-      font-size: 14px; cursor: pointer; font-family: inherit;
-    `;
-
-    btnAllow.addEventListener("click", () => { overlay.remove(); resolve(true);  });
-    btnDeny.addEventListener("click",  () => { overlay.remove(); resolve(false); });
-
-    row.append(btnAllow, btnDeny);
-    box.append(icon, title, body, row);
-    overlay.appendChild(box);
     document.body.appendChild(overlay);
+
+    // Focus the Allow button so keyboard users can immediately press Enter
+    overlay.querySelector("#lai-grant").focus();
+
+    function finish(granted) {
+      overlay.remove();
+      resolve(granted);
+    }
+
+    overlay.querySelector("#lai-grant").addEventListener("click", () => finish(true));
+    overlay.querySelector("#lai-deny").addEventListener("click",  () => finish(false));
+
+    // Escape key = deny
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") finish(false);
+    });
   });
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── LocalAI class ──────────────────────────────────────────────────────────────
 
-const localai = {
+export class LocalAI {
+  /**
+   * @param {object} opts
+   * @param {string}   opts.bridgeUrl          Full URL to bridge.html (required)
+   * @param {boolean}  [opts.skipPermission]   Skip the permission dialog (e.g. for the dashboard itself)
+   * @param {string}   [opts.appName]          Shown in the permission dialog instead of window.location.origin
+   */
+  constructor({ bridgeUrl, skipPermission = false, appName } = {}) {
+    if (!bridgeUrl) throw new Error("LocalAI: bridgeUrl is required");
 
-  /** Initialize the bridge. Shows a permission prompt on first use. */
-  async init() {
-    if (_initPromise) return _initPromise;
-    _initPromise = (async () => {
-      const key = PERM_KEY();
-      const stored = localStorage.getItem(key);
+    this._bridgeUrl      = bridgeUrl;
+    this._skipPermission = skipPermission;
+    this._appName        = appName;
 
-      if (stored === "granted") {
-        _injectBridge();
-        return;
-      }
+    this._iframe    = null;   // HTMLIFrameElement
+    this._ready     = false;  // true after LOCALAI_READY received
+    this._pending   = {};     // requestId → { resolve, reject, onToken, timer }
+    this._onMessage = this._handleMessage.bind(this);
 
-      if (stored === "denied") {
-        throw new Error("LocalAI: permission was previously denied by the user.");
-      }
+    // Parse bridge origin once so we can validate every inbound message
+    this._bridgeOrigin = new URL(bridgeUrl).origin;
+  }
 
-      const approved = await _askPermission();
-
-      if (!approved) {
-        localStorage.setItem(key, "denied");
-        throw new Error("LocalAI: user denied permission.");
-      }
-
-      localStorage.setItem(key, "granted");
-      _injectBridge();
-    })();
-
-    return _initPromise;
-  },
-
-  /** Returns all cached model objects: [{ id, name, task, default }, ...] */
-  async models() {
-    _assertInit();
-    await _send({ type: "LOCALAI_LIST" });
-
-    return new Promise((resolve, reject) => {
-      _pending["__list__"] = { resolve, reject };
-      setTimeout(() => {
-        if (_pending["__list__"]) {
-          delete _pending["__list__"];
-          reject(new Error("LocalAI: timed out waiting for model list."));
-        }
-      }, 8000);
-    });
-  },
-
-  /** Returns the name of the default model (throws if none cached). */
-  async defaultModel() {
-    _assertInit();
-    const list = await localai.models();
-
-    if (list.length === 0) {
-      throw new Error("LocalAI: no models cached. Visit the dashboard to download one.");
-    }
-
-    const pinned = list.find((m) => m.default);
-    return pinned ? pinned.name : list[0].name;
-  },
+  // ── connect() ──────────────────────────────────────────────────────────────
 
   /**
-   * Pin a model as the default.
-   * @param {string} modelNameOrId  Model name or id. Pass null to clear.
+   * Asks the user for permission (once per session) then performs the
+   * LOCALAI_INIT → LOCALAI_READY handshake with the bridge iframe.
+   *
+   * @returns {Promise<void>} Resolves when the bridge is ready.
+   * @throws  If the user denies permission, or the handshake times out.
    */
-  async setDefaultModel(modelNameOrId) {
-    _assertInit();
-    let modelId = null;
+  async connect() {
+    if (this._ready) return;
 
-    if (modelNameOrId !== null && modelNameOrId !== undefined) {
-      const list = await localai.models();
-      const found = list.find(
-        (m) => m.name === modelNameOrId || m.id === modelNameOrId
+    // ── 1. Permission ──────────────────────────────────────────────────────
+
+    const origin = this._appName ?? window.location.origin;
+
+    if (!this._skipPermission) {
+      const sessionKey = `${PERMISSION_KEY}:${this._bridgeOrigin}`;
+      const cached = sessionStorage.getItem(sessionKey);
+
+      if (cached === "denied") {
+        throw new Error("LocalAI: permission was denied this session.");
+      }
+
+      if (cached !== "granted") {
+        const granted = await showPermissionDialog(origin);
+        sessionStorage.setItem(sessionKey, granted ? "granted" : "denied");
+        if (!granted) throw new Error("LocalAI: user denied permission.");
+      }
+    }
+
+    // ── 2. Create iframe ───────────────────────────────────────────────────
+
+    this._iframe = document.createElement("iframe");
+    this._iframe.setAttribute("style", IFRAME_STYLE);
+    this._iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    this._iframe.src = this._bridgeUrl;
+
+    window.addEventListener("message", this._onMessage);
+    document.body.appendChild(this._iframe);
+
+    // ── 3. Wait for iframe load, then send LOCALAI_INIT ────────────────────
+
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error("LocalAI: bridge iframe failed to load."));
+      }, HANDSHAKE_TIMEOUT);
+
+      this._iframe.addEventListener("load", () => {
+        clearTimeout(timer);
+        resolve();
+      }, { once: true });
+    });
+
+    // ── 4. LOCALAI_INIT → wait for LOCALAI_READY ──────────────────────────
+
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error("LocalAI: handshake timed out — bridge did not respond."));
+      }, HANDSHAKE_TIMEOUT);
+
+      // Temporarily listen for LOCALAI_READY before _ready is set
+      const listener = (e) => {
+        if (e.origin !== this._bridgeOrigin) return;
+        if (e.data?.type === "LOCALAI_READY") {
+          clearTimeout(timer);
+          window.removeEventListener("message", listener);
+          this._ready = true;
+          resolve();
+        }
+      };
+      window.addEventListener("message", listener);
+
+      // Initiate handshake — bridge locks our origin after this
+      this._iframe.contentWindow.postMessage(
+        { type: "LOCALAI_INIT" },
+        this._bridgeOrigin
       );
-      if (!found) throw new Error(`LocalAI: model "${modelNameOrId}" not found in cache.`);
-      modelId = found.id;
-    }
-
-    await _send({ type: "LOCALAI_SET_DEFAULT", modelId });
-
-    return new Promise((resolve, reject) => {
-      _pending["__setdefault__"] = { resolve, reject };
-      setTimeout(() => {
-        if (_pending["__setdefault__"]) {
-          delete _pending["__setdefault__"];
-          reject(new Error("LocalAI: timed out setting default model."));
-        }
-      }, 5000);
     });
-  },
+  }
+
+  // ── getModels() ────────────────────────────────────────────────────────────
 
   /**
-   * Run inference. Resolves with the full text when generation ends.
-   *
-   * @param {object} options
-   * @param {string}   [options.model]    Model name or id. Defaults to defaultModel().
-   * @param {Array}    options.messages   OpenAI-style messages: [{ role, content }, ...]
-   * @param {Function} [options.onToken]  Called with each token as it streams.
-   * @returns {Promise<string>}
+   * Returns all models currently cached in the LocalAI dashboard.
+   * @returns {Promise<Array<{ id: string, name: string, task: string, isDefault: boolean }>>}
    */
-  async prompt({ model, messages, onToken } = {}) {
-    const { promise } = localai.promptAbortable({ model, messages, onToken });
-    return promise;
-  },
+  getModels() {
+    this._assertReady();
+    return new Promise((resolve, reject) => {
+      const id = uid();
+      const timer = setTimeout(() => {
+        delete this._pending[id];
+        reject(new Error("LocalAI: getModels() timed out."));
+      }, 10_000);
+
+      // LIST uses a lightweight one-shot pending slot
+      this._pending[id] = {
+        kind: "list",
+        resolve: (models) => { clearTimeout(timer); resolve(models); },
+        reject:  (err)    => { clearTimeout(timer); reject(err); },
+      };
+
+      this._post({ type: "LOCALAI_LIST", id });
+    });
+  }
+
+  // ── getDefault() ───────────────────────────────────────────────────────────
 
   /**
-   * Run inference with an abort handle.
-   * Calling abort() sends an interrupt — generation stops and the promise
-   * resolves with the partial text generated so far.
-   *
-   * @param {object} options  Same as prompt()
-   * @returns {{ promise: Promise<string>, abort: () => void }}
+   * Returns the default model, or null if nothing is cached.
+   * @returns {Promise<{ id: string, name: string, task: string, isDefault: boolean } | null>}
    */
-  promptAbortable({ model, messages, onToken, maxTokens = 256 } = {}) {
-    _assertInit();
+  async getDefault() {
+    const models = await this.getModels();
+    return models.find((m) => m.isDefault) ?? null;
+  }
 
-    if (!messages?.length) {
-      throw new Error("LocalAI: messages array is required.");
+  // ── setDefault() ───────────────────────────────────────────────────────────
+
+  /**
+   * Pins a model as the new default in the LocalAI dashboard.
+   * @param {string | null} modelId  Pass null to clear the default.
+   * @returns {Promise<{ modelId: string | null }>}
+   */
+  setDefault(modelId) {
+    this._assertReady();
+    return new Promise((resolve, reject) => {
+      const id = uid();
+      const timer = setTimeout(() => {
+        delete this._pending[id];
+        reject(new Error("LocalAI: setDefault() timed out."));
+      }, 10_000);
+
+      this._pending[id] = {
+        kind: "set_default",
+        resolve: (r) => { clearTimeout(timer); resolve(r); },
+        reject:  (e) => { clearTimeout(timer); reject(e); },
+      };
+
+      this._post({ type: "LOCALAI_SET_DEFAULT", id, modelId: modelId ?? null });
+    });
+  }
+
+  // ── run() ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Runs inference on a local model and returns the completed response text.
+   *
+   * @param {object}   opts
+   * @param {Array}    opts.messages         OpenAI-style message array
+   * @param {string}   [opts.modelId]        Defaults to the user's default model
+   * @param {number}   [opts.maxTokens=256]
+   * @param {number}   [opts.temperature=0.7]
+   * @param {number}   [opts.top_p=0.9]
+   * @param {function} [opts.onToken]        Called with each streamed token string
+   *
+   * @returns {Promise<{ id: string, text: string }>}
+   *   Resolves with the full concatenated response and the request id (for cancel()).
+   */
+  async run({
+    messages,
+    modelId,
+    maxTokens   = 256,
+    temperature = 0.7,
+    top_p       = 0.9,
+    onToken,
+  } = {}) {
+    this._assertReady();
+
+    if (!messages?.length) throw new Error("LocalAI: messages array is required.");
+
+    // Resolve modelId from default if not supplied
+    if (!modelId) {
+      const def = await this.getDefault();
+      if (!def) throw new Error("LocalAI: no models are cached. Download one first.");
+      modelId = def.id;
     }
 
-    const id = crypto.randomUUID();
-    let aborted = false;
+    const id = uid();
 
-    const promise = (async () => {
-      const list = await localai.models();
-      if (list.length === 0) throw new Error("LocalAI: no models cached.");
+    const promise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.cancel(id);
+        delete this._pending[id];
+        reject(new Error(`LocalAI: run() timed out after ${REQUEST_TIMEOUT / 1000}s.`));
+      }, REQUEST_TIMEOUT);
 
-      let targetModel;
-      if (model) {
-        targetModel = list.find((m) => m.name === model || m.id === model);
-        if (!targetModel) throw new Error(`LocalAI: model "${model}" not found in cache.`);
-      } else {
-        const def = await localai.defaultModel();
-        targetModel = list.find((m) => m.name === def) ?? list[0];
+      this._pending[id] = {
+        kind:    "run",
+        buf:     "",          // accumulates streamed tokens
+        onToken: onToken ?? null,
+        resolve: (text) => { clearTimeout(timer); resolve({ id, text }); },
+        reject:  (err)  => { clearTimeout(timer); reject(err); },
+      };
+    });
+
+    this._post({ type: "LOCALAI_RUN", id, messages, modelId, maxTokens, temperature, top_p });
+
+    return promise;
+  }
+
+  // ── cancel() ──────────────────────────────────────────────────────────────
+
+  /**
+   * Sends an abort signal for an in-flight run().
+   * The run()'s Promise will still resolve (with whatever was generated so far)
+   * rather than reject, matching the bridge's behavior.
+   *
+   * @param {string} requestId  The id returned by (or pending from) run()
+   */
+  cancel(requestId) {
+    if (!this._ready || !requestId) return;
+    this._post({ type: "LOCALAI_ABORT", id: requestId });
+  }
+
+  // ── disconnect() ──────────────────────────────────────────────────────────
+
+  /**
+   * Tears down the bridge iframe and rejects all pending requests.
+   */
+  disconnect() {
+    window.removeEventListener("message", this._onMessage);
+
+    for (const [, entry] of Object.entries(this._pending)) {
+      entry.reject(new Error("LocalAI: disconnected."));
+    }
+    this._pending = {};
+    this._ready   = false;
+
+    if (this._iframe) {
+      this._iframe.remove();
+      this._iframe = null;
+    }
+  }
+
+  // ── Internal ───────────────────────────────────────────────────────────────
+
+  _assertReady() {
+    if (!this._ready) throw new Error("LocalAI: call connect() first.");
+  }
+
+  _post(msg) {
+    this._iframe?.contentWindow?.postMessage(msg, this._bridgeOrigin);
+  }
+
+  _handleMessage(e) {
+    // Only accept messages from the locked-in bridge origin
+    if (e.origin !== this._bridgeOrigin) return;
+    const msg = e.data;
+    if (!msg?.type) return;
+
+    // ── LOCALAI_MODELS (response to LIST) ─────────────────────────────────
+    if (msg.type === "LOCALAI_MODELS") {
+      // Find the pending LIST slot (there should only be one at a time)
+      for (const [id, entry] of Object.entries(this._pending)) {
+        if (entry.kind === "list") {
+          delete this._pending[id];
+          entry.resolve(msg.models ?? []);
+          return;
+        }
       }
+      return;
+    }
 
-      return new Promise((resolve, reject) => {
-        _pending[id] = { resolve, reject, onToken, _chunks: [] };
+    // ── LOCALAI_DEFAULT_SET ────────────────────────────────────────────────
+    if (msg.type === "LOCALAI_DEFAULT_SET") {
+      for (const [id, entry] of Object.entries(this._pending)) {
+        if (entry.kind === "set_default") {
+          delete this._pending[id];
+          entry.resolve({ modelId: msg.modelId });
+          return;
+        }
+      }
+      return;
+    }
 
-        _send({
-          type: "LOCALAI_RUN",
-          id,
-          modelId: targetModel.id,
-          messages,
-          maxTokens,
-        });
+    // For run-related messages we need the id
+    const id = msg.id;
+    if (!id) return;
+    const entry = this._pending[id];
+    if (!entry) return;
 
-        setTimeout(() => {
-          if (_pending[id]) {
-            delete _pending[id];
-            reject(new Error("LocalAI: inference timed out."));
-          }
-        }, 120_000); // 2 min — generous for slow WASM devices
-      });
-    })();
+    // ── LOCALAI_STATUS ─────────────────────────────────────────────────────
+    if (msg.type === "LOCALAI_STATUS") {
+      // Informational — no action needed, but could be surfaced via a callback
+      // if the developer passes onStatus. Not implemented here to keep the API
+      // surface minimal.
+      return;
+    }
 
-    const abort = () => {
-      if (aborted) return;
-      aborted = true;
-      _send({ type: "LOCALAI_ABORT", id });
-    };
+    // ── LOCALAI_TOKEN ──────────────────────────────────────────────────────
+    if (msg.type === "LOCALAI_TOKEN") {
+      entry.buf += msg.token;
+      entry.onToken?.(msg.token);
+      return;
+    }
 
-    return { promise, abort };
-  },
+    // ── LOCALAI_DONE ───────────────────────────────────────────────────────
+    if (msg.type === "LOCALAI_DONE") {
+      delete this._pending[id];
+      entry.resolve(entry.buf);
+      return;
+    }
 
-  /** Reset the stored permission for this origin (useful for testing). */
-  resetPermission() {
-    localStorage.removeItem(PERM_KEY());
-    _initPromise = null;
-  },
-};
-
-// ── Internal guard ────────────────────────────────────────────────────────────
-
-function _assertInit() {
-  if (!_initPromise) {
-    throw new Error("LocalAI: call localai.init() before using other methods.");
+    // ── LOCALAI_ERROR ──────────────────────────────────────────────────────
+    if (msg.type === "LOCALAI_ERROR") {
+      delete this._pending[id];
+      entry.reject(new Error(`LocalAI: ${msg.message ?? "inference error"}`));
+      return;
+    }
   }
 }
-
-// ── Exports ───────────────────────────────────────────────────────────────────
-
-export { localai };
-export default localai;
